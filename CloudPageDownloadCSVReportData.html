@@ -1,0 +1,241 @@
+%%[
+VAR @code, @rows, @rowCount, @i
+VAR @row, @market, @contacts, @leads, @quotes, @permissions, @ocf, @cars
+
+
+SET @today = Now()
+
+ 
+/* Inizio tabella */
+]%%
+<table width="600" cellspacing="0" cellpadding="0" role="presentation" align="center">
+    <tr>
+        <td align="center">
+            <img src="https://image.official.leapmotor-international.com/lib/fe3f11717564047c741272/m/1/278fb4ae-773c-47b4-a5af-617d23f33f84.png" alt="Leap Motor logo" width="300" style="display: block; padding: 0; text-align: center; width: 300px; border: 0;">
+        </td>
+    </tr>
+</table>
+
+
+
+<h2 align="center">Weekly Market Report    %%=FormatDate(@today, "dd/MM/yyyy")=%%</h2><table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; font-family: Arial, sans-serif; font-size: 14px; text-align: center;" align="center">
+  <thead style="background-color: #f2f2f2;">
+    
+    <tr>
+      <th>Country</th><th>MarketCode</th>
+      
+      <th>Leads</th>
+      <th>Quotes</th>
+      <th>Permissions</th>
+      <th>OCF</th>
+      <th>Cars</th>
+    </tr>
+  </thead>
+  
+
+%%[
+
+FOR @code = 8801 TO 8811 DO
+
+  /* Formatta MarketCode a 4 cifre se necessario */
+  SET @marketCodeStr = FormatNumber(@code, "0000")
+
+  /* Recupera tutte le righe con quel MarketCode */
+  SET @rows = LookupOrderedRows("ValoriMercatoTotal", 0, "MarketCode ASC", "MarketCode", @marketCodeStr)
+  SET @rowCount = RowCount(@rows)
+  SET @marketDescription = Lookup("MarketDefaultLanguages_Prod", "MarketDescription", "MarketCode", @marketCodeStr)
+
+
+  IF @rowCount > 0 THEN
+
+    FOR @i = 1 TO @rowCount DO
+      SET @row = Row(@rows, @i)
+      SET @market = Field(@row, "MarketCode")
+      SET @contacts = Field(@row, "Contacts")
+      SET @leads = Field(@row, "Leads")
+      SET @quotes = Field(@row, "Quotes")
+      SET @permissions = Field(@row, "Permissions")
+      SET @ocf = Field(@row, "OCF")
+      SET @cars = Field(@row, "Cars")
+]%%
+
+      <tr>
+        <td>%%=v(@marketDescription)=%%</td>
+        <td>%%=v(@market)=%%</td>
+        
+        <td>%%=v(@leads)=%%</td>
+        <td>%%=v(@quotes)=%%</td>
+        <td>%%=v(@permissions)=%%</td>
+        <td>%%=v(@ocf)=%%</td>
+        <td>%%=v(@cars)=%%</td>
+      </tr>
+
+%%[    
+    NEXT @i
+
+  ENDIF
+
+NEXT @code
+
+]%%
+
+  
+</table>
+
+
+
+
+
+%%[SET @url = CloudPagesURL(7514)]%%
+
+
+ <table role="presentation" cellspacing="0" align="center" cellpadding="0" border="0" style="padding: 0;">
+   <tr><td height="100"></td></tr>
+        <tr>
+
+           <td align="center" style="margin: 0 auto; background-color:#0F500F; color:#FFFFFF; font-family:Montserrat, sans-serif; font-size:14px; font-weight:normal; line-height:44px; text-align:center; text-decoration:none; width:220px; border-radius:20px; -webkit-text-size-adjust:none;">
+
+  <!--[if mso]>
+  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
+    href="http://"
+    style="height:44px;v-text-anchor:middle;" arcsize="20%" strokecolor="#0F500F" fillcolor="#0F500F">
+    <w:anchorlock/>
+    <center style="color:#FFFFFF; font-family:Montserrat, sans-serif; font-size:14px; font-weight:normal;width:220px; max-width:220px;border-radius:20px; -webkit-text-size-adjust:none;">
+      CTA
+    </center>
+  </v:roundrect>
+  <![endif]-->
+
+  <!--[if !mso]><!-- -->
+  <a href="%%=RedirectTo(@url)=%%" width="220" height="44" style="display:inline-block; background-color:#0F500F; color:#FFFFFF; font-family:Montserrat, sans-serif; font-size:14px; font-weight:normal; line-height:44px; text-align:center; text-decoration:none; width:220px; border-radius:20px; -webkit-text-size-adjust:none;">
+   Dowload here the csv report
+  </a>
+  <!--<![endif]-->
+
+             
+          </td>
+        </tr>
+      </table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script runat="server">
+Platform.Load("Core", "1");
+
+var csvHeader = "Country,Market,Leads,Quotes,Permissions,OCF,Cars";
+
+  var now = new Date();
+var yyyy = now.getFullYear();
+var mm = ("0" + (now.getMonth() + 1)).slice(-2); // mesi da 0-11
+var dd = ("0" + now.getDate()).slice(-2);
+var formattedDate = yyyy + "-" + mm + "-" + dd;
+
+// Intestazione con data
+var csvContent = "Report Date:," + formattedDate + "\r\n";
+
+// Intestazione colonne
+csvContent += "Country,Market,Leads,Quotes,Permissions,OCF,Cars";
+
+for (var code = 8801; code <= 8811; code++) {
+    var codeStr = code.toString();
+    var marketCodeStr = "0000".substring(0, 4 - codeStr.length) + codeStr;
+
+    var rows = Platform.Function.LookupOrderedRows(
+        "ValoriMercatoTotal", 0, "MarketCode ASC", "MarketCode", marketCodeStr
+    );
+
+    if (rows && rows.length > 0) {
+        var marketDescription = Platform.Function.Lookup(
+            "MarketDefaultLanguages_Prod", "MarketDescription", "MarketCode", marketCodeStr
+        );
+
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var line = [
+                marketDescription,
+                row["MarketCode"],
+                row["Leads"],
+                row["Quotes"],
+                row["Permissions"],
+                row["OCF"],
+                row["Cars"]
+            ].join(",");
+
+            csvContent += "\r\n" + line;
+        }
+    }
+}
+
+// Codifica CSV in base64 per scaricarlo tramite <a download>
+var encoded = Base64Encode(csvContent);
+Variable.SetValue("csvData", encoded);
+</script>
+<table width="600" cellspacing="0" cellpadding="0" role="presentation" align="center">
+    <tr>
+        <td align="center">
+            <img src="https://image.official.leapmotor-international.com/lib/fe3f11717564047c741272/m/1/278fb4ae-773c-47b4-a5af-617d23f33f84.png" 
+                 alt="Leap Motor logo" width="300" 
+                 style="display: block; padding: 0; text-align: center; width: 300px; border: 0;">
+        </td>
+    </tr>
+</table>
+
+
+<!-- HTML che offre il download -->
+
+
+
+
+<table role="presentation" cellspacing="0" align="center" cellpadding="0" border="0" style="padding: 0;">
+  <h2 style ="text-align:center" align ="center">Download CSV</h2>
+        <tr>
+
+           <td align="center" style="margin: 0 auto; background-color:#0F500F; color:#FFFFFF; font-family:Montserrat, sans-serif; font-size:14px; font-weight:normal; line-height:44px; text-align:center; text-decoration:none; width:220px; border-radius:20px; -webkit-text-size-adjust:none;">
+
+  <!--[if mso]>
+  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
+    href="http://"
+    style="height:44px;v-text-anchor:middle;" arcsize="20%" strokecolor="#0F500F" fillcolor="#0F500F">
+    <w:anchorlock/>
+    <center style="color:#FFFFFF; font-family:Montserrat, sans-serif; font-size:14px; font-weight:normal;width:220px; max-width:220px;border-radius:20px; -webkit-text-size-adjust:none;">
+      CTA
+    </center>
+  </v:roundrect>
+  <![endif]-->
+
+  <!--[if !mso]><!-- -->
+  <a href="data:text/csv;base64,%%=v(@csvData)=%%"  width="220" height="44" style="display:inline-block; background-color:#0F500F; color:#FFFFFF; font-family:Montserrat, sans-serif; font-size:14px; font-weight:normal; line-height:44px; text-align:center; text-decoration:none; width:220px; border-radius:20px; -webkit-text-size-adjust:none;" download="mercati.csv">
+   Download here the report
+  </a>
+  <!--<![endif]-->
+
+             
+          </td>
+        </tr>
+      </table>
