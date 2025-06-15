@@ -1,0 +1,344 @@
+<script runat="server">
+Platform.Load("Core", "1.1.1");
+
+// ===================
+// BLOQUE POST - Procesar reserva y guardar
+// ===================
+if (Request.Method == "POST") {
+    try {
+        var bookingID = Request.GetFormField("Booking_ID") || Request.GetQueryStringParameter("Booking_ID");
+        var userID = Request.GetFormField("User");
+        var hotelID = Request.GetFormField("hotel");
+        var checkin = Request.GetFormField("checkin");
+        var checkout = Request.GetFormField("checkout");
+        var guests = parseInt(Request.GetFormField("guests"));
+        var currency = Request.GetFormField("currency");
+        var reservationStatus = "confirmado";
+
+        var first_name = Request.GetFormField("first_name");
+        var last_name = Request.GetFormField("last_name");
+        var ageP = parseInt(Request.GetFormField("ageP"));
+        var dniP = Request.GetFormField("dniP");
+
+        var missingFields = "";
+        if (!userID) missingFields += "userID, ";
+        if (!hotelID) missingFields += "hotelID, ";
+        if (!checkin) missingFields += "checkin, ";
+        if (!checkout) missingFields += "checkout, ";
+
+        if (missingFields != "") {
+            Write("Error: Faltan campos obligatorios: " + missingFields.slice(0, -2));
+            return;
+        }
+
+        var checkInDate = new Date(checkin + "T00:00:00Z");
+        var checkOutDate = new Date(checkout + "T00:00:00Z");
+
+        if (isNaN(checkInDate.getTime()) || isNaN(checkOutDate.getTime())) {
+            Write("Error: Fechas no válidas.");
+            return;
+        }
+
+        var timeDifference = checkOutDate - checkInDate;
+        if (timeDifference <= 0) {
+            Write("Error: La fecha de salida debe ser posterior a la de entrada.");
+            return;
+        }
+
+        var nights = Math.round(timeDifference / (1000 * 3600 * 24));
+        var pricePerNight = 80;
+        var priceEUR = nights * pricePerNight;
+        var priceLocal = currency == "USD" ? priceEUR * 1.1 : priceEUR;
+
+        var now = new Date();
+        var bookingDateUTC = now.getUTCFullYear() + "-" + ("0" + (now.getUTCMonth() + 1)).slice(-2) + "-" + ("0" + now.getUTCDate()).slice(-2)
+            + " " + ("0" + now.getUTCHours()).slice(-2) + ":" + ("0" + now.getUTCMinutes()).slice(-2) + ":" + ("0" + now.getUTCSeconds()).slice(-2);
+
+        function insertarEnDE(deName, fields) {
+            try {
+                var status = DataExtension.Init(deName).Rows.Add(fields);
+                if (status) {
+                    Write("<br>Registro agregado correctamente a " + deName);
+                }
+            } catch (e) {
+                Write("<br>Error al insertar en " + deName + ": " + e.message);
+            }
+        }
+ // ============================
+// Actualizar reserva principal sin sobrescribir Booking_ID
+// ============================
+var updateResult = DataExtension.Init("JourneyReservations_HotelesMOA_").Rows.Update(
+    {
+        "User_ID": userID,
+        "Hotel_ID": hotelID,
+        "Check_In_Date": checkin,
+        "Check_Out_Date": checkout,
+        "Nights": nights,
+        "Guests": guests,
+        "Price_EUR": priceEUR,
+        "Price_Local": priceLocal,
+        "Currency_Local": currency,
+        "Booking_Date": bookingDateUTC,
+        "Reservation_Status": reservationStatus
+    },
+    ["Booking_ID"],
+    [bookingID]
+);
+
+Write("<br>Debug - Booking_ID: " + bookingID);
+Write("<br>Debug - User_ID: " + userID);
+Write("<br>Debug - Hotel_ID: " + hotelID);
+Write("<br>Debug - Check_In_Date: " + checkin);
+Write("<br>Debug - Check_Out_Date: " + checkout);
+Write("<br>Debug - Booking_Date: " + bookingDateUTC);
+
+if (updateResult > 0) {
+    Write("<br>Reserva actualizada correctamente.");
+} else {
+    Write("<br>Error al actualizar la reserva principal.");
+}
+
+      
+       // ============================
+        // Insertar huésped principal
+        // ============================
+
+        var guestIDP = "GUEST-" + new Date().getTime() + "-" + Math.floor(Math.random() * 90000 + 10000);
+        var isAdult = (ageP >= 18);
+
+        insertarEnDE("Guests_HotelesMOA", {
+            "Guest_ID": guestIDP,
+            "Booking_ID": bookingID,
+            "First_Name": first_name,
+            "Last_Name": last_name,
+            "Age": ageP,
+            "DNI": dniP,
+            "Is_adult": isAdult
+        });
+      
+      // ============================
+        // Insertar acompañantes
+        // ============================
+
+        for (var i = 1; i <= (guests - 1); i++) {
+            var firstName = Request.GetFormField("acompanante" + i + "_first_name");
+            var lastName = Request.GetFormField("acompanante" + i + "_last_name");
+            var age = parseInt(Request.GetFormField("acompanante" + i + "_age"));
+            var dni = Request.GetFormField("acompanante" + i + "_dni");
+            var isAdult = (age >= 18);
+
+            if (i >= 2) {
+        // Para los acompañantes 2 y 3
+        if (isAdult && !dni) {
+            Write("<br>Error: El DNI es obligatorio para los acompañantes mayores de edad.");
+            continue;
+        }
+    }
+
+    if (!firstName || !lastName || isNaN(age)) {
+        Write("<br>Error: Datos incompletos o inválidos para acompañante " + i);
+        continue;
+    }
+
+            var guestID = "GUEST-" + new Date().getTime() + "-" + Math.floor(Math.random() * 90000 + 10000);
+
+            insertarEnDE("Guests_HotelesMOA", {
+                "Guest_ID": guestID,
+                "Booking_ID": bookingID,
+                "First_Name": firstName,
+                "Last_Name": lastName,
+                "Age": age,
+                "DNI": dni,
+                "Is_adult": isAdult
+            });
+        }
+
+        Write("<br>¡Reserva confirmada con éxito! Redirigiendo...");
+        //Write('<script>setTimeout(function() { window.location.href = "https://mchn8kdspj3pfr55f9x132xgkx94.pub.sfmc-content.com/pqzladxcisd"; }, 2000);</script>');
+
+    } catch (e) {
+        Write("Error en el bloque POST: " + e.message);
+    }
+}
+
+</script>
+
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Formulario de Reserva</title>
+  <style>
+    /* Estilo de la página */
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f4f4f4;
+    }
+    form {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 600px;
+      margin: auto;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+    }
+    input, select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+    }
+  </style>
+ <script>
+    // Función para mostrar/ocultar los campos de los acompañantes
+    function toggleGuestInfo() {
+      var guests = document.getElementById('guests').value;
+      var guestInfo1 = document.getElementById('guest-info-1');
+      var guestInfo2 = document.getElementById('guest-info-2');
+     
+      if (guests == 2) {
+        guestInfo1.style.display = 'block';
+        guestInfo2.style.display = 'none'; // Mostrar solo un acompañante adicional
+      } else if (guests == 3) {
+        guestInfo1.style.display = 'block';
+        guestInfo2.style.display = 'block'; // Mostrar los dos acompañantes adicionales
+      } else {
+        guestInfo1.style.display = 'none';
+        guestInfo2.style.display = 'none';
+      }
+    }
+  </script>
+</head>
+<body>
+  <h2 style="text-align: center;">Formulario de Reserva</h2>
+
+%%[
+    VAR @bookingID, @userID, @hotelID, @hotelName, @checkin, @checkout, @guests, @priceEUR, @currency, @checkinC, @checkoutC, @userID
+    SET @bookingID = RequestParameter("Booking_ID")
+
+    /* Verificamos que se haya recibido el Booking_ID */
+    IF NOT EMPTY(@bookingID) THEN
+        /* Usamos Lookup para obtener los valores */
+        SET @userID = Lookup("Reservations_HotelesMOA", "User_ID", "Booking_ID", @bookingID)
+        SET @hotelID = Lookup("Reservations_HotelesMOA", "Hotel_ID", "Booking_ID", @bookingID)
+        SET @checkin = Lookup("Reservations_HotelesMOA", "Check_In_Date", "Booking_ID", @bookingID)
+        SET @checkout = Lookup("Reservations_HotelesMOA", "Check_Out_Date", "Booking_ID", @bookingID)
+        SET @guests = Lookup("Reservations_HotelesMOA", "Guests", "Booking_ID", @bookingID)
+        SET @priceEUR = Lookup("Reservations_HotelesMOA", "Price_EUR", "Booking_ID", @bookingID)
+        SET @currency = Lookup("Reservations_HotelesMOA", "Currency_Local", "Booking_ID", @bookingID)
+        SET @checkinC = FormatDate(@checkin, "YYYY-MM-DD")
+        SET @checkoutC = FormatDate(@checkout, "YYYY-MM-DD")
+       
+        /* Obtenemos el nombre del hotel */
+        SET @hotelName = Lookup("Hotels_HotelesMOA", "Hotel", "Hotel_ID", @hotelID)
+       
+        /* Obtenemos el nombre del user */
+        SET @userName = Lookup("User_HotelesMOA", "First_Name", "User_ID", @userID)
+    ENDIF
+  ]%%
+
+  <form method="post" action="">
+
+    <!-- Selección de Usuario -->
+    <label>User:</label>
+    <select name="User" required>
+      <option value="">-- Selecciona un usuario --</option>
+      <option value="%%=v(@userID)=%%" selected>%%=v(@userName)=%%</option>
+      <!-- Puedes agregar más usuarios desde una DE si quieres -->
+    </select>
+
+    <!-- Datos del huésped principal -->
+    <label>First Name:</label>
+    <input type="text" name="first_name" value="%%=v(@first_name)=%%" required>
+
+    <label>Last Name:</label>
+    <input type="text" name="last_name" value="%%=v(@last_name)=%%" required>
+
+    <label>DNI:</label>
+    <input type="text" name="dniP" value="%%=v(@dniP)=%%" required>
+
+    <label>Age:</label>
+    <select name="ageP" required>
+      <option value="">-- Selecciona --</option>
+      %%[ FOR @i = 1 TO 100 DO ]%%
+        <option value="%%=v(@i)=%%" %%[IF v(@i) == v(@ageP) THEN]%%selected%%[ENDIF]%%>%%=v(@i)=%%</option>
+      %%[ NEXT @i ]%%
+    </select>
+
+    <!-- Cantidad de huéspedes -->
+    <label>Guests (1–3):</label>
+    <select id= "guests" name="guests">
+      %%[ FOR @g = 1 TO 3 DO ]%%
+        <option value="%%=v(@g)=%%" %%[IF v(@g) == v(@guests) THEN]%%selected%%[ENDIF]%%>%%=v(@g)=%%</option>
+      %%[ NEXT @g ]%%
+    </select>
+
+    <!-- Hotel -->
+    <label>Hotel:</label>
+    <select name="hotel" required>
+      <option value="">-- Selecciona un hotel --</option>
+      <option value="%%=v(@hotelID)=%%" selected>%%=v(@hotelName)=%%</option>
+      <!-- Puedes agregar más hoteles dinámicamente desde una DE -->
+    </select>
+
+    <!-- Fechas -->
+    <label>Check-In Date:</label>
+    <input type="date" name="checkin" id="checkin" value="%%=v(@checkinC)=%%" required>
+
+    <label>Check-Out Date:</label>
+    <input type="date" name="checkout" id="checkout" value="%%=v(@checkoutC)=%%" required>
+
+    <!-- Moneda -->
+    <label for="currency">Selecciona la Moneda:</label>
+    <select id="currency" name="currency">
+      <option value="EUR" %%[IF v(@currency) == "EUR" THEN]%%selected%%[ENDIF]%%>EUR</option>
+      <option value="USD" %%[IF v(@currency) == "USD" THEN]%%selected%%[ENDIF]%%>USD</option>
+    </select>
+
+    <!-- Noches (Campo oculto) -->
+    <input type="hidden" name="nights" id="nights" value="%%=v(@nights)=%%">
+   
+      <!-- Información de los Acompañantes -->
+    <div id="guest-info-1" class="guest-info">
+      <h4>Acompañante 1</h4>
+      <label>First Name:</label>
+      <input type="text" name="acompanante1_first_name">
+
+      <label>Last Name:</label>
+      <input type="text" name="acompanante1_last_name">
+
+      <label>Age:</label>
+      <input type="number" name="acompanante1_age" min="0" max="100">
+
+      <label>DNI:</label>
+      <input type="text" name="acompanante1_dni">
+    </div>
+
+    <div id="guest-info-2" class="guest-info">
+      <h4>Acompañante 2</h4>
+      <label>First Name:</label>
+      <input type="text" name="acompanante2_first_name">
+
+      <label>Last Name:</label>
+      <input type="text" name="acompanante2_last_name">
+
+      <label>Age:</label>
+      <input type="number" name="acompanante2_age" min="0" max="100">
+
+      <label>DNI:</label>
+      <input type="text" name="acompanante2_dni">
+    </div>
+
+    <br><br>
+
+    <!-- Enviar -->
+    <br><br>
+    <input type="submit" value="Submit">
+  </form>
+</body>
+
+</html>
