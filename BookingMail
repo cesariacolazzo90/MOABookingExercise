@@ -1,0 +1,241 @@
+%%[
+
+/* ---------------------------
+   Retrieve Attribute Values
+---------------------------- */
+SET @bookingID = AttributeValue("Booking_ID")
+SET @userID = AttributeValue("User_ID")
+SET @hotelID = AttributeValue("Hotel_ID")
+SET @checkIn = AttributeValue("Check_In_Date")
+SET @checkOut = AttributeValue("Check_Out_Date")
+
+SET @formattedCheckIn = FormatDate(@checkIn, "d/M/yy")
+SET @formattedCheckOut = FormatDate(@checkOut, "d/M/yy")
+
+SET @nights = AttributeValue("Nights")
+SET @guests = AttributeValue("Guests")
+SET @priceEUR = AttributeValue("Price_EUR")
+SET @priceLocal = AttributeValue("Price_Local")
+SET @currency = AttributeValue("Currency_Local")
+SET @bookingDate = AttributeValue("Booking_Date")
+SET @formattedbookingDate = FormatDate(@bookingDate, "d/M/yy")
+SET @status = AttributeValue("Reservation_Status")
+SET @type = AttributeValue("Type")
+
+/* ---------------------------
+   Lookups for Names & Language
+---------------------------- */
+SET @language = Lookup("User_HotelsMOA", "Language", "User_ID", @userID)
+SET @hotelName = Lookup("Hotels_HotelesMOA", "Hotel", "Hotel_ID", @hotelID)
+SET @User = Lookup("User_HotelsMOA", "First_Name", "User_ID", @userID)
+
+
+/* ---------------------------
+   Ensure Language Fallback
+---------------------------- */
+IF Empty(@language) THEN
+  SET @language = "GB"
+ENDIF
+
+/* ---------------------------
+   Compile Guest Names
+---------------------------- */
+
+
+SET @AdultsCount = 1
+SET @kidsCount = 0
+SET @adultList = ""
+SET @kidList = ""
+
+SET @guestRows = LookupRows("Guests_HotelsMOA", "Booking_ID", @bookingID)
+SET @guestRowCount = RowCount(@guestRows)
+
+IF @guestRowCount > 0 THEN
+  FOR @x = 1 TO @guestRowCount DO
+    SET @guestRow = Row(@guestRows, @x)
+    SET @guestName = Field(@guestRow, "First_Name")
+    SET @guestDNI = Field(@guestRow, "DNI")
+    SET @isAdult = Lowercase(Field(@guestRow, "is_adult"))
+
+    IF @isAdult == "true" THEN
+      SET @AdultsCount = Add(@AdultsCount, 1)
+      SET @adultLine = Concat("Adult ", @x, ": ", @guestName, " – DNI: ", @guestDNI)
+      SET @adultList = IIF(Empty(@adultList), @adultLine, Concat(@adultList, "<br>", @adultLine))
+      
+    ELSEIF @isAdult == "false" THEN
+      SET @kidsCount = Add(@kidsCount, 1)
+      SET @kidLine = Concat("Kid ", @x, ": ", @guestName, " – DNI: ", @guestDNI)
+      SET @kidList = IIF(Empty(@kidList), @kidLine, Concat(@kidList, "<br>", @kidLine))
+    ENDIF
+  NEXT @x
+ENDIF
+
+
+
+
+
+
+
+
+
+    
+ 
+
+
+
+/* ---------------------------
+   Language-Based Message Text
+---------------------------- */
+SET @row = LookupRows("Message_HotelesMOA", "Language", @language)
+
+
+IF RowCount(@row) >0 THEN
+  SET @row1 = Row(@row, 1)
+  SET @greeting = Field(@row1, "Greeting")
+  SET @main = Field(@row1, "Main")
+  SET @contact = Field(@row1, "Contact")
+  SET @adults = Field(@row1, "Adults")
+  SET @kids = Field(@row1, "Kids")
+  SET @nightsM = Field(@row1, "Nights")
+  SET @hotel = Field(@row1, "Hotel")
+  SET @place = Field(@row1, "Place")
+  SET @checkinM = Field(@row1, "Checkin")
+  SET @checkoutM = Field(@row1, "Checkout")
+  SET @farewell = Field(@row1, "Farewell")
+ELSE
+  /* Default in English */
+  SET @greeting = "Hello"
+  SET @main = "Your booking details"
+  SET @contact = "Contact Information"
+  SET @adults = "Adults"
+  SET @kids = "Kids"
+  SET @nightsM = "Nights"
+  SET @hotel = "Hotel"
+  SET @place = "Place"
+  SET @checkinM = "Check-in date"
+  SET @checkoutM = "Check-out date"
+  SET @farewell = "Thanks for trusting us"
+ENDIF
+
+
+
+
+
+/* ---------------------------
+   Price Calculation
+---------------------------- */
+SET @currency = Lookup("JourneyReservations_HotelesMOA_", "Currency_Local", "Booking_ID", @bookingID)
+SET @BasePriceRaw = Lookup("JourneyReservations_HotelesMOA_", "Price_EUR", "Booking_ID", @bookingID)
+SET @ExchangeRateRaw = Lookup("ExchRate", "Exchange_Rate", "Currency", @currency)
+SET @priceLocal = FormatNumber(Multiply(@BasePriceRaw, @ExchangeRateRaw), "N2")
+
+/* ---------------------------
+   Price Label by Language
+---------------------------- */
+SET @price = 
+  IIF(@language == "PT", "Preço",
+  IIF(@language == "RU", "Цена",
+  IIF(@language == "GB", "Price",
+  IIF(@language == "GE", "Preis",
+  IIF(@language == "FR", "Prix",
+  IIF(@language == "ES", "Precio", "Price"))))))
+
+/* ---------------------------
+   Currency Symbol by Currency
+---------------------------- */
+SET @currencySymbol = 
+  IIF(@currency == "USD", "$",
+  IIF(@currency == "RUB", "₽",
+  IIF(@currency == "GBP", "£",
+  IIF(@currency == "EUR", "€", ""))))
+
+/* ---------------------------
+   CTA Text by Language
+---------------------------- */
+SET @ctatext = 
+  IIF(@language == "PT", "Confirmar Reserva",
+  IIF(@language == "RU", "Подтвердить бронирование",
+  IIF(@language == "GB", "Confirm Booking",
+  IIF(@language == "GE", "Buchung bestätigen",
+  IIF(@language == "FR", "Confirmer la réservation",
+  IIF(@language == "ES", "Confirmar Reserva", "Confirm Booking"))))))
+
+/* ---------------------------
+   Days Remaining Until Check-In
+---------------------------- */
+SET @CheckInRaw = Lookup("JourneyReservations_HotelesMOA_", "Check_In_Date", "Booking_ID", @bookingID)
+SET @CheckInR = DateParse(@CheckInRaw, "M/d/yyyy h:mm") 
+SET @daysremaining = DateDiff(Now(), @CheckInR, "D")
+
+]%%
+
+
+
+<meta charset="UTF-8">
+<title>%%=v(@main)=%%</title>
+<style>
+  body { font-family: Arial, sans-serif; line-height: 1.5; }
+  .container { max-width: 600px; margin: auto; padding: 20px; }
+  .section { margin-bottom: 20px; }
+  .label { font-weight: bold; }
+</style>
+
+<div class="container">
+  <h1>%%=v(@greeting)=%% %%=v(@user)=%%</h1>
+  <p>%%=v(@main)=%%</p>
+<p>Guest %%=v(@x)=%%: %%=v(@fullName)=%% – DNI: %%=v(@dni)=%%</p>
+  <div class="section">
+    <h2>%%=v(@hotel)=%%</h2>
+    <p><span class="label">ID Hotel:</span> %%=v(@hotelID)=%%</p>
+    <p><span class="label">%%=v(@place)=%%:</span> %%=v(@hotelName)=%%</p>
+  </div>
+
+  <div class="section">
+    <h2> Check in and Check Out</h2>
+    <p><span class="label">%%=v(@checkinM)=%%:</span> %%=v(@formattedCheckIn)=%%</p>
+    <p><span class="label">%%=v(@checkoutM)=%%:</span> %%=v(@formattedCheckOut)=%%</p>
+    <p><span class="label">%%=v(@nightsM)=%%:</span> %%=v(@nights)=%%</p>
+  </div>
+
+  <div class="section">
+    <h2>%%=v(@contact)=%%</h2>
+    <p><span class="label"> User:</span> %%=v(@user)=%%</p>
+    <p><span class="label">Booking ID :</span> %%=v(@bookingID)=%%</p>
+    <p><span class="label">&gt;%%=v(@adults)=%% </span>%%=v(@AdultsCount)=%% </p>
+    <p><span class="label">%%=v(@kids)=%%  : </span>%%=v(@kidsCount)=%%
+    </p>
+    <p><span class="label">Guests: </span></p>
+    <p>%%=v(@kidList)=%%</p> 
+    <p>%%=v(@adultList)=%%</p>    
+   
+       
+      <p></p>
+      
+    <p><span class="label">Fecha de reserva:</span> %%=v(@formattedbookingDate)=%%</p>
+    <p> <span class="label">Remainining days : %%=v(@daysremaining)=%% </span> </p>
+     <p> <span class="label">type:  </span>  %%=v(@type)=%% </p>
+    
+      
+   
+  </div>
+
+  <div class="section">
+    <h2>%%=v(@price)=%%</h2>
+    <p><span class="label">Total €:</span> %%=v(@priceEUR)=%% </p>
+    <p><span class="label">Total %%=v(@currencySymbol)=%%:</span> %%=v(@priceLocal)=%%</p>
+  </div>
+
+  <div class="section">
+    <p><span class="label">Reservation Status::</span> %%=v(@status)=%%</p>
+  </div>
+
+  <div class="section">
+    <p>
+     <a href="https://mchn8kdspj3pfr55f9x132xgkx94.pub.sfmc-content.com/d2ucp1n1esr?bookingID=%%=v(@bookingID)=%%&User_ID=%%=v(@userID)=%%" style="padding: 10px 20px; background-color: #0073e6; color: white; text-decoration: none; border-radius: 5px;">
+         %%=v(@ctatext)=%%
+      </a>
+    </p>
+  </div>
+
+  <p>%%=v(@farewell)=%%</p><p></p><p></p><p></p><p></p>
+</div>
